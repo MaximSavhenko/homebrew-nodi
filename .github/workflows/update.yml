@@ -1,0 +1,65 @@
+name: Update and validate Nodi tap
+on:
+  schedule:
+    - cron: '15 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: nodi-tap-update
+  cancel-in-progress: false
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      changed: ${{ steps.sync.outputs.changed }}
+      available: ${{ steps.sync.outputs.available }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Consume only a confirmed stable release
+        id: sync
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ./scripts/update-formula.ps1
+          $available = Test-Path ./Formula/nodi.rb
+          "available=$($available.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          $changed = $false
+          if ($available) {
+            git add -- Formula
+            $changed = -not [string]::IsNullOrWhiteSpace((git status --porcelain -- Formula | Out-String))
+          }
+          "changed=$($changed.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          if ($changed) {
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git commit -m 'Update Nodi from confirmed release receipt'
+            git push origin HEAD:main
+            if ($LASTEXITCODE -ne 0) { throw 'Tap push failed; no force update allowed.' }
+          }
+  install:
+    needs: update
+    if: needs.update.outputs.available == 'true' && (needs.update.outputs.changed == 'true' || github.event_name != 'schedule')
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install published binary using the real Homebrew tap
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+        run: |
+          set -euo pipefail
+          brew install MaximSavhenko/nodi/nodi
+          nodi version
+          nodi help
+          brew test MaximSavhenko/nodi/nodi
+          brew upgrade MaximSavhenko/nodi/nodi
+          brew uninstall MaximSavhenko/nodi/nodi
+          if command -v nodi; then echo 'Nodi remains after uninstall' >&2; exit 1; fi
