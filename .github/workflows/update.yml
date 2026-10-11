@@ -18,6 +18,7 @@ jobs:
     outputs:
       changed: ${{ steps.sync.outputs.changed }}
       available: ${{ steps.sync.outputs.available }}
+      version: ${{ steps.sync.outputs.version }}
     steps:
       - uses: actions/checkout@v4
       - name: Consume only a confirmed stable release
@@ -29,6 +30,10 @@ jobs:
           ./scripts/update-formula.ps1
           $available = Test-Path ./Formula/nodi.rb
           "available=$($available.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          if ($available) {
+            $formulaVersion=[regex]::Match((Get-Content ./Formula/nodi.rb -Raw),'version "([0-9]+\.[0-9]+\.[0-9]+)"').Groups[1].Value
+            "version=$formulaVersion" >> $env:GITHUB_OUTPUT
+          }
           $changed = $false
           if ($available) {
             git add -- Formula
@@ -54,12 +59,31 @@ jobs:
       - name: Install published binary using the real Homebrew tap
         env:
           HOMEBREW_NO_AUTO_UPDATE: '1'
+          EXPECTED_VERSION: ${{ needs.update.outputs.version }}
         run: |
           set -euo pipefail
-          brew install MaximSavhenko/nodi/nodi
+          brew tap MaximSavhenko/nodi
+          tap_repo="$(brew --repo MaximSavhenko/nodi)"
+          if [[ "$EXPECTED_VERSION" != '0.1.0' ]]; then
+            # Upgrade from our existing, immutable first stable Formula.
+            git -C "$tap_repo" fetch --depth=1 origin d950532a5637bec4fae5e0f67d1b922d868cc4b8
+            git -C "$tap_repo" checkout FETCH_HEAD
+            brew install MaximSavhenko/nodi/nodi
+            [[ "$(nodi version)" == 'nodi 0.1.0 darwin/'* ]]
+            git -C "$tap_repo" checkout main
+            brew upgrade MaximSavhenko/nodi/nodi
+          else
+            brew install MaximSavhenko/nodi/nodi
+          fi
+          [[ "$(nodi version)" == "nodi $EXPECTED_VERSION darwin/"* ]]
           nodi version
           nodi help
           brew test MaximSavhenko/nodi/nodi
+          if [[ "$EXPECTED_VERSION" != '0.1.0' ]]; then
+            [[ "$(nodi -v)" == "nodi $EXPECTED_VERSION darwin/"* ]]
+            test -f "$(brew --prefix)/share/zsh/site-functions/_nodi"
+            test -f "$(brew --prefix)/etc/bash_completion.d/nodi"
+          fi
           brew upgrade MaximSavhenko/nodi/nodi
           brew uninstall MaximSavhenko/nodi/nodi
           hash -r
