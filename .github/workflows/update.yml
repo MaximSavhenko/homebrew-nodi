@@ -54,22 +54,38 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-15, macos-15-intel]
+        upgrade_from: ['0.1.0', '0.2.1']
     runs-on: ${{ matrix.os }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: MaximSavhenko/nodi
+          ref: v${{ needs.update.outputs.version }}
+          persist-credentials: false
       - name: Install published binary using the real Homebrew tap
         env:
           HOMEBREW_NO_AUTO_UPDATE: '1'
           EXPECTED_VERSION: ${{ needs.update.outputs.version }}
         run: |
           set -euo pipefail
+          export NODI_CONFIG_DIR="$RUNNER_TEMP/nodi-preserved-config"
+          mkdir -p "$NODI_CONFIG_DIR" "$RUNNER_TEMP/nodi-preserved-downloads"
+          printf '{"repository":"owner/private"}\n' > "$NODI_CONFIG_DIR/config.json"
+          printf 'fictional-upgrade-read' > "$NODI_CONFIG_DIR/read.credential"
+          printf 'fictional-upgrade-write' > "$NODI_CONFIG_DIR/write.credential"
+          chmod 700 "$NODI_CONFIG_DIR"
+          chmod 600 "$NODI_CONFIG_DIR"/*
+          printf 'recipient edits preserved\n' > "$RUNNER_TEMP/nodi-preserved-downloads/model.step"
+          shasum -a 256 "$NODI_CONFIG_DIR"/* "$RUNNER_TEMP/nodi-preserved-downloads"/* > "$RUNNER_TEMP/state-before.sha256"
           brew tap MaximSavhenko/nodi
           tap_repo="$(brew --repo MaximSavhenko/nodi)"
-          if [[ "$EXPECTED_VERSION" != '0.1.0' ]]; then
-            # Upgrade from our existing, immutable first stable Formula.
-            git -C "$tap_repo" fetch --depth=1 origin d950532a5637bec4fae5e0f67d1b922d868cc4b8
+          if [[ "$EXPECTED_VERSION" != '${{ matrix.upgrade_from }}' && "$EXPECTED_VERSION" != '0.1.0' ]]; then
+            previous=d950532a5637bec4fae5e0f67d1b922d868cc4b8
+            if [[ '${{ matrix.upgrade_from }}' == '0.2.1' ]]; then previous=b981726c0f7a5a5c44b6815c65b41b8301e3371c; fi
+            git -C "$tap_repo" fetch origin "$previous"
             git -C "$tap_repo" checkout FETCH_HEAD
             brew install MaximSavhenko/nodi/nodi
-            [[ "$(nodi version)" == 'nodi 0.1.0 darwin/'* ]]
+            [[ "$(nodi version)" == 'nodi ${{ matrix.upgrade_from }} darwin/'* ]]
             git -C "$tap_repo" checkout main
             brew upgrade MaximSavhenko/nodi/nodi
           else
@@ -79,11 +95,18 @@ jobs:
           nodi version
           nodi help
           brew test MaximSavhenko/nodi/nodi
+          shasum -a 256 --check "$RUNNER_TEMP/state-before.sha256"
+          [[ "$(stat -f '%Lp' "$NODI_CONFIG_DIR/read.credential")" == '600' ]]
+          [[ "$(stat -f '%Lp' "$NODI_CONFIG_DIR/write.credential")" == '600' ]]
           if [[ "$EXPECTED_VERSION" != '0.1.0' ]]; then
             [[ "$(nodi -v)" == "nodi $EXPECTED_VERSION darwin/"* ]]
             test -f "$(brew --prefix)/share/zsh/site-functions/_nodi"
             test -f "$(brew --prefix)/etc/bash_completion.d/nodi"
+            python3 scripts/test-shell-completion.py "$(brew --prefix)/bin/nodi"
+            python3 scripts/test-persistent-zsh.py "$(brew --prefix)/bin/nodi" --homebrew
           fi
+          brew reinstall MaximSavhenko/nodi/nodi
+          shasum -a 256 --check "$RUNNER_TEMP/state-before.sha256"
           brew upgrade MaximSavhenko/nodi/nodi
           brew uninstall MaximSavhenko/nodi/nodi
           hash -r
