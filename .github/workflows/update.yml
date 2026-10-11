@@ -54,7 +54,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [macos-15, macos-15-intel]
-        upgrade_from: ['0.1.0', '0.2.1']
+        upgrade_from: ['0.1.0', '0.2.1', '0.3.0']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -82,6 +82,7 @@ jobs:
           if [[ "$EXPECTED_VERSION" != '${{ matrix.upgrade_from }}' && "$EXPECTED_VERSION" != '0.1.0' ]]; then
             previous=d950532a5637bec4fae5e0f67d1b922d868cc4b8
             if [[ '${{ matrix.upgrade_from }}' == '0.2.1' ]]; then previous=b981726c0f7a5a5c44b6815c65b41b8301e3371c; fi
+            if [[ '${{ matrix.upgrade_from }}' == '0.3.0' ]]; then previous=e7077665eff6c24e375a9fe88110e4592ae51f3b; fi
             git -C "$tap_repo" fetch origin "$previous"
             git -C "$tap_repo" checkout FETCH_HEAD
             brew install MaximSavhenko/nodi/nodi
