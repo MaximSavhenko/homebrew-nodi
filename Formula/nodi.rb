@@ -1,18 +1,18 @@
 class Nodi < Formula
   desc "Private engineering package transport via GitHub Releases"
   homepage "https://github.com/MaximSavhenko/nodi"
-  version "0.1.0"
+  version "0.2.1"
   license "MIT"
   depends_on :macos
 
   on_macos do
     on_arm do
-      url "https://github.com/MaximSavhenko/nodi/releases/download/v0.1.0/nodi-darwin-arm64.zip"
-      sha256 "1d84dd85bde5d1b3d91addecb0660d2d0e50bd45ffbe1e428c414ec7587bd88d"
+      url "https://github.com/MaximSavhenko/nodi/releases/download/v0.2.1/nodi-darwin-arm64.zip"
+      sha256 "8be9257cfa45b215cdc1446927b8dee8ab87ca4ddafecc3526e8f4eb897d07f4"
     end
     on_intel do
-      url "https://github.com/MaximSavhenko/nodi/releases/download/v0.1.0/nodi-darwin-amd64.zip"
-      sha256 "e6007774114c8282aefeab7388241315a02ac7ff1ef4ea31758008937f4db754"
+      url "https://github.com/MaximSavhenko/nodi/releases/download/v0.2.1/nodi-darwin-amd64.zip"
+      sha256 "cac0417e360f293dc8698420e8d0d5fd58f1707c4d218ddd5333159407b55b39"
     end
   end
 
@@ -21,6 +21,9 @@ class Nodi < Formula
     bin.install "nodi-darwin-#{arch}" => "nodi"
     chmod 0755, bin/"nodi"
     pkgshare.install "LICENSE"
+    bash_completion.install "completion/nodi.bash" => "nodi"
+    zsh_completion.install "completion/_nodi"
+    pkgshare.install "completion/nodi.ps1"
   end
 
   test do
