@@ -62,4 +62,6 @@ jobs:
           brew test MaximSavhenko/nodi/nodi
           brew upgrade MaximSavhenko/nodi/nodi
           brew uninstall MaximSavhenko/nodi/nodi
+          hash -r
+          test ! -e "$(brew --prefix)/bin/nodi"
           if command -v nodi; then echo 'Nodi remains after uninstall' >&2; exit 1; fi
